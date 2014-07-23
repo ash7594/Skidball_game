@@ -1,0 +1,679 @@
+<html>
+<head>
+<!--From ASH rises the WORLD 14 feb 2014 21:44-->
+</head>
+
+<style>
+
+*{
+	padding: 0px;
+	margin: 0px;
+}
+
+body{
+	background-color: #222222;
+}
+
+#score{
+	display: absolute;
+	position: absolute;
+	width: 200px;
+	height: 100px;
+	line-height: 100px;
+	background-color: rgba(0,0,0,0.5);
+	text-align: center;
+	color: white;
+	font-size: 100px;
+}
+
+#game_over_div{
+	position: absolute;
+	width: 400px;
+	height: 200px;
+	line-height: 200px;
+	background-color: rgba(218,165,32,0.7);
+	text-align: center;
+	color: white;
+	font-size: 75px;
+}
+
+#score_head{
+	display: absolute;
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	width: 200px;
+	height: 65px;
+	line-height: 65px;
+	background-color: rgba(0,0,0,1);
+	text-align: center;
+	color: green;
+	font-size: 60px;
+}
+
+#time{
+	position: absolute;
+	width: 200px;
+	height: 100px;
+	line-height: 100px;
+	background-color: rgba(0,0,0,0.5);
+	text-align: center;
+	color: white;
+	font-size: 100px;
+}
+
+#time_head{
+	display: absolute;
+	position: absolute;
+	width: 200px;
+	height: 65px;
+	line-height: 65px;
+	background-color: rgba(0,0,0,1);
+	text-align: center;
+	color: blue;
+	font-size: 60px;
+}
+
+#msg{
+	height: 60px;
+	line-height: 60px;
+	color: red;
+	font-size: 40px;
+}
+
+#canvas{
+	background-color: #000000;		
+	position: absolute;
+	border: 5px red solid;
+	border-radius: 20px;
+	z-index: -1;
+}
+
+#instructions{
+	position: absolute;
+	top:200px;
+	height: 300px;
+	background-color: rgba(0,0,0,1);
+	text-align: center;
+	color: white;
+	font-size: 20px;
+}
+
+</style>
+
+<body>
+
+<center><div id="msg"></div></center>
+<div id="score_head">Score</div>
+<div id="score">0</div>
+<div id="time_head" style="display: none">Time</div>
+<div id="time" style="display: none">10</div>
+
+<canvas id="canvas"></canvas>
+<div id="game_over_div" style="display: none" onclick="location.reload();">I'm ready!</div>
+<div id="instructions" style="display: none">
+<center>Use Left - Right Arrow to control...</center><BR>
+<center>Keep both blobs on screen</center><BR>
+<center>The walls force you away...watch out</center><BR>
+<center>Collect powerups during gameplay and</center><BR>
+<center>Learn from what you see!</center><BR><BR>
+<center>HAPPY PLAYING!</center>
+</div>
+
+<div id="button_ins" style="display: none" onmouseover="ins_show();" onmouseout="ins_hide();">Instructions</div>
+
+<script>
+
+var canvas = document.getElementById("canvas");
+var ctx = canvas.getContext("2d");
+
+canvas.style.left =	0.05*window.innerWidth;
+canvas.style.top =	0.1*window.innerHeight;
+canvas.width = Math.floor(0.9*window.innerWidth);
+canvas.height = Math.floor(0.8*window.innerHeight);
+
+var z1, z2;
+var score = 0;
+var time = 10;
+var date;
+var initial_sec = 0;
+var game_over = 0;
+
+var num_levels = 9;
+var level_width = Math.floor(canvas.height/num_levels);
+var level_start_x = 0;
+var level_start_y = level_width;
+var start_level = 4; //not more that num_levels
+var level_speed = 3;  //based on how many executions to wait 
+var count_exec = 0;
+
+/////////////////////////////////////////////////
+/////////////// HOLES //////////////////////
+//////////////////////////////////////////////////
+
+var hole_width = 20; //same as ball
+var line_bh = 0; //randomized (before hole)
+var line_ah = 0; // canvas.width - line_bh - hole_width (after hole)
+var holes = [];
+var random_hole = 0;
+var ball_tunnel = 0;
+var resume = 0;
+var acceptable1_speed = 5;
+var acceptable2_speed = 5;
+
+for(var i=0;i<num_levels;i++) {
+	random_hole = Math.floor(Math.random()*(canvas.width-60-hole_width) + 30); 
+	holes.push(random_hole);
+}
+
+
+////////////////////////////////////////////////////
+/////////// PLAYER 1 ///////////////////////
+////////////////////////////////////////////////////
+
+var keys1 = [];
+var player1_velY = 0;
+var player1_velX = 0;
+var player1_r = 10;
+var player1_acc = 5;
+var player1_max_speed = 100;
+var player1_friction = 0.98;
+var player1_wall_bump = 20;
+var player1_invertkeys = false;
+var player1_x = Math.floor(canvas.width/2);
+var player1_y = level_width*start_level - player1_r;
+var player1_level = player1_y;
+var player1_hole = start_level -1;
+
+////////////////////////////////////////////////////
+/////////// PLAYER 2 ///////////////////////
+////////////////////////////////////////////////////
+
+var keys2 = [];
+var player2_velY = 0;
+var player2_velX = 0;
+var player2_r = 10;
+var player2_acc = 5;
+var player2_max_speed = 100;
+var player2_friction = 0.98;
+var player2_wall_bump = 20;
+var player2_invertkeys = false;
+var player2_x = Math.floor(canvas.width/2);
+var player2_y = level_width*(start_level+1) - player2_r;
+var player2_level = player2_y;
+var player2_hole = start_level;
+
+////////////////////////////////////////////////////
+///////////// POWER UPS /////////////////
+////////////////////////////////////////////////////
+
+                                                                                  //orange//     //light blue//
+var set_of_colors = ["blue","green","yellow","purple","red","#FF6600","#00FFFF"];
+var power_generate = 0;
+var powers = [];
+var power_levels = [];
+var power_locations = [];
+var power_y = [];
+var power_r = 10;
+var power = -1;
+var power_time = 0;
+var msg_is = "No Message";
+
+var cw = window.innerWidth;
+var ch = window.innerHeight;
+
+document.getElementById("time").style.left = window.innerWidth - 200;
+document.getElementById("time").style.top = 65;
+document.getElementById("time_head").style.left = window.innerWidth - 200;
+document.getElementById("time_head").style.top = 0;
+document.getElementById("game_over_div").style.left = (window.innerWidth - 400)/2;
+document.getElementById("button_ins").style.position = "absolute";
+document.getElementById("button_ins").style.left = (window.innerWidth - 20)/2;
+document.getElementById("game_over_div").style.top = (window.innerHeight - 200)/2;
+document.getElementById("button_ins").style.top = (window.innerHeight - 50);
+document.getElementById("instructions").style.width = (window.innerWidth);
+
+function ins_show() {
+	document.getElementById('instructions').style.display = "block";
+}
+
+function ins_hide() {
+	document.getElementById('instructions').style.display = "none";
+}
+
+function player1_invert() {
+	
+	if(keys1[37] || keys1[39]) {
+		keys1[37] = !keys1[37];
+		keys1[39] = !keys1[39];
+		player1_invertkeys = !player1_invertkeys;
+	}
+	
+	player1_velX *= -1;
+/*
+if(keys[37]) keys[37] = false;
+	else keys[37] = true;
+	if(keys[39]) keys[39] = false;
+	else keys[39] = true;
+	//keys[37] = !keys[37];
+	//keys[39] = !keys[39];
+	player1_velX *= -1;
+	if(player1_invertkeys) player1_invertkeys = true;
+	else player1_invertkeys = false;
+*/	
+}
+
+function player2_invert() {
+	
+	if(keys2[37] || keys2[39]) {
+		keys2[37] = !keys2[37];
+		keys2[39] = !keys2[39];
+		player2_invertkeys = !player2_invertkeys;
+	}
+	player2_velX *= -1;
+}
+
+function update_players() {
+	
+	document.getElementById('score').innerHTML = score;
+	document.getElementById('msg').innerHTML = msg_is;
+	if(power_time != 0) {
+		power_time--;
+	} else {
+		msg_is = "No Message";
+		resetall();
+	}	
+	
+	if(player1_level == player2_level) {
+		date = new Date();
+		if(initial_sec == 0)
+			initial_sec = date.getSeconds();
+		if(date.getSeconds() < initial_sec) {
+			time = 10 - ((date.getSeconds()+60) - initial_sec);
+		} else time = 10 - (date.getSeconds() - initial_sec);
+		document.getElementById('time').style.display = "block";
+		document.getElementById('time_head').style.display = "block";
+		document.getElementById('time').innerHTML = time;
+		if(time == 0)
+			game_over =1;
+	}
+	else {
+		document.getElementById('time').style.display = "none";
+		document.getElementById('time_head').style.display = "none";
+		time = 10;
+		initial_sec = 0;
+	}
+	
+    if (keys1[39]) {
+        if (player1_velX < player1_max_speed) {
+            player1_velX += player1_acc;
+        }
+		else if (player1_velX > player1_max_speed) {
+            player1_velX -= player1_acc;
+        }
+    }
+    if (keys1[37]) {
+        if (player1_velX > -player1_max_speed) {
+            player1_velX -= player1_acc;
+        }
+		if (player1_velX < -player1_max_speed) {
+            player1_velX += player1_acc;
+        }
+    }
+    if (keys2[39]) {
+        if (player2_velX < player2_max_speed) {
+            player2_velX += player2_acc;
+        }
+		if (player2_velX > player2_max_speed) {
+            player2_velX -= player2_acc;
+        }
+    }
+    if (keys2[37]) {
+        if (player2_velX > -player2_max_speed) {
+            player2_velX -= player2_acc;
+        }
+		if (player2_velX < -player2_max_speed) {
+            player2_velX += player2_acc;
+        }
+    }
+
+    player1_velY *= player1_friction;
+    player1_y += player1_velY;
+	player1_velX *= player1_friction;
+    player1_x += player1_velX;
+	
+	player2_velY *= player2_friction;
+    player2_y += player2_velY;
+	player2_velX *= player2_friction;
+    player2_x += player2_velX;
+	
+    if (player1_x >= (canvas.width - player1_r/2)) {
+        //if(player1_velX + player1_wall_bump > player1_velX) player1_velX += player1_wall_bump;
+        player1_velX += player1_wall_bump;
+		player1_invert();
+    } else if (player1_x <= player1_r/2) {
+        //if(player1_velX + player1_wall_bump > player1_velX) player1_velX += player1_wall_bump;
+        player1_velX -= player1_wall_bump;
+		player1_invert();
+    }
+    
+	/*if (player1_y >= (canvas.height - player1_r/2)) {
+        player1_y = player1_r/2;
+    } else if (player1_y <= player1_r/2) {
+        player1_y = (canvas.height - player1_r/2);
+    }*/
+	
+	if (player2_x >= (canvas.width - player2_r/2)) {
+        player2_velX += player2_wall_bump;
+		player2_invert();
+    } else if (player2_x <= player2_r/2) {
+        player2_velX -= player2_wall_bump;
+		player2_invert();
+    }
+    
+	/*if (player2_y >= (canvas.height - player2_r/2)) {
+        player2_y = player2_r/2;
+    } else if (player2_y <= player2_r/2) {
+        player2_y = (canvas.height - player2_r/2);
+    }*/
+	
+	ctx.fillStyle="rgba(0,0,0,0.3)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+	
+	var line_begin = level_start_y;
+	
+	if(line_begin < 0) {
+		level_start_y += level_width;
+		random_hole = Math.floor(Math.random()*(canvas.width-60-hole_width) + 30); 
+		holes.push(random_hole);
+		holes.shift();
+		player1_hole--;
+		player2_hole--;
+		if(powers.length != 0) {
+		if(power_levels[0] == 0) {
+			powers.shift();
+			power_locations.shift();
+			power_levels.shift();
+			power_y.shift();
+		}	
+		}
+		
+		for(var j=0;j<powers.length;j++) {
+			power_levels[j]--;
+		}
+		
+	/////////////////// power up /////////////////////
+	
+	power_generate = Math.random();
+	if(power_generate <= 0.35) {
+		
+		var ran_pow = Math.floor(Math.random()*(canvas.width-40) + 20);
+		power_locations.push(ran_pow);
+		power_levels.push(num_levels-1);
+		power_y.push(num_levels*level_width - power_r);
+		
+		if(power_generate <= 0.05)
+			powers.push(0);
+		else if(power_generate <= 0.1)
+			powers.push(1);
+		else if(power_generate <= 0.15)
+			powers.push(2);
+		else if(power_generate <= 0.2)
+			powers.push(3);
+		else if(power_generate <= 0.25)
+			powers.push(4);
+		else if(power_generate <= 0.3)
+			powers.push(5);
+		else if(power_generate <= 0.35)
+			powers.push(6);
+	}
+ 	
+	///////////////////////////////////////////////////////
+	
+	}
+	
+	line_begin = level_start_y;
+	
+	for(var i=0; i<num_levels; i++) {
+		line_bh = holes[i] - 10;
+		line_ah = holes[i] + 10 + hole_width;
+		ctx.beginPath();
+		ctx.lineWidth = 2;
+		ctx.strokeStyle = "#FF6666";
+		ctx.moveTo(level_start_x,line_begin);
+		ctx.lineTo(line_bh,line_begin);
+		ctx.stroke();
+		
+		ctx.moveTo(line_bh,line_begin);
+		ctx.lineTo(line_bh+10,line_begin+10);
+		ctx.stroke();
+		ctx.moveTo(line_ah,line_begin);
+		ctx.lineTo(line_ah-10,line_begin+10);
+		ctx.stroke();
+		
+		ctx.moveTo(line_ah,line_begin);
+		ctx.lineTo(canvas.width,line_begin);
+		ctx.stroke();
+		ctx.closePath();
+		
+		for(var j=0;j<powers.length;j++) {
+			if(power_levels[j] > i) break;
+			else if(power_levels[j] == i)
+				{power = j; break;}
+		}
+		
+		if(power != -1) {
+		ctx.beginPath();
+		ctx.arc(power_locations[power]+power_r, line_begin-power_r, power_r, 0, Math.PI * 2);
+		ctx.fillStyle = set_of_colors[powers[power]];
+		ctx.fill();
+		ctx.closePath();
+		power = -1;
+		}
+		line_begin += level_width;
+	}
+    
+	ctx.beginPath();
+    ctx.arc(player1_x, player1_y, player1_r, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+	ctx.strokeStyle = "blue";
+	ctx.fillStyle = "white";
+	ctx.fill();
+	ctx.stroke();
+	ctx.closePath();
+	
+	ctx.beginPath();
+    ctx.arc(player2_x, player2_y, player2_r, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+	ctx.strokeStyle = "blue";
+	ctx.fillStyle = "white";
+	ctx.fill();
+	ctx.stroke();
+	ctx.closePath();
+	
+	count_exec++;
+	if(count_exec%level_speed == 0) {
+		
+		level_start_y-=1;
+		player1_level-=1;
+		player2_level-=1;
+		player1_y = player1_level;
+		player2_y = player2_level;
+		for(var c=0;c<powers.length;c++) {
+			power_y[c] -= 1;
+		}	
+		/*holes.shift();
+		random_hole = Math.floor(Math.random()*(canvas.width-60-hole_width) + 30); 
+		holes.push(random_hole);*/
+	} 
+	
+	for(var i=0;i<powers.length;i++) {
+		if(player1_y >= power_y[i]-10 && player1_y <= power_y[i]+10 && player1_x >= (power_locations[i] + power_r-10) && player1_x <= (power_locations[i] + power_r+10)) {
+			
+			if(powers[i] == 0)
+				{resetall(); player1_acc = 10; player2_acc = 10; msg_is = "Acceleration Increased";} //5
+			else if(powers[i] == 1)
+				{resetall(); acceptable1_speed = 10; acceptable2_speed = 10; msg_is = "Easier drop in hole";}  //5
+			else if(powers[i] == 2)
+				{resetall(); player1_wall_bump = 10; player2_wall_bump = 10; msg_is = "Wall Bounce is less intense";}  //20
+			else if(powers[i] == 3)
+				{resetall(); level_speed = 5; msg_is = "Vertical Scroll slow";}	
+			else if(powers[i] == 4)
+				{resetall(); level_speed = 1; msg_is = "Vertical Scroll fast";}
+			else if(powers[i] == 5)
+				{resetall(); score+=5; msg_is = "Score Bonus";}	
+			else if(powers[i] == 6)
+				{resetall(); player1_acc = 2; player2_acc = 2; msg_is = "Acceleration Decreased";}
+			
+			power_time = 300;
+			powers.splice(i,1);	
+			power_locations.splice(i,1);	
+			power_levels.splice(i,1);	
+			power_y.splice(i,1);	
+			break;
+		}
+	}
+	
+	if(player1_y<0 || player1_y>canvas.height || player2_y<0 || player2_y>canvas.height) {
+		game_over = 1;
+	}
+	
+	if(game_over == 1) {
+		////////////// game over ////////////////
+		document.getElementById('game_over_div').style.display = "block";
+		document.getElementById('button_ins').style.display = "block";
+	}
+	else {
+	if(player1_velX > -acceptable1_speed && player1_velX < acceptable1_speed && player1_x > (holes[player1_hole]-5) && player1_x < (holes[player1_hole]+hole_width+5)) {
+		////// score increase /////
+		score++;
+		ball_tunnel = 1;
+	} 
+	if(player2_velX > -acceptable2_speed && player2_velX < acceptable2_speed && player2_x > (holes[player2_hole]-5) && player2_x < (holes[player2_hole]+hole_width+5)) {
+		////// score increase /////
+		score++;
+		if(ball_tunnel == 0) ball_tunnel = 2;
+		else ball_tunnel = 3;
+	}
+	
+	if(ball_tunnel != 0) {
+		resume = 1;
+		clearTimeout(z1);
+		tunnel_drop();
+	}	
+	else
+	 z1 = setTimeout(update_players, 17);
+	}
+}
+
+function resetall() {
+	player1_acc = 5; player2_acc = 5;
+	acceptable1_speed = 5; acceptable2_speed = 5;
+	player1_wall_bump = 20; player2_wall_bump = 20;
+	level_speed = 3;
+}
+
+function tunnel_drop() {
+	
+	if(ball_tunnel == 1 && resume == 1) {
+		player1_y = player1_level-10;
+		player1_x = holes[player1_hole]+Math.floor(hole_width/2);
+	} else if(ball_tunnel == 2 && resume == 1) {
+		player2_y = player2_level-10;
+		player2_x = holes[player2_hole]+Math.floor(hole_width/2);
+	} else if(ball_tunnel == 3 && resume == 1) {
+		player1_y = player1_level-10;
+		player1_x = holes[player1_hole]+Math.floor(hole_width/2);
+		player2_y = player2_level-10;
+		player2_x = holes[player2_hole]+Math.floor(hole_width/2);
+	}
+	
+	//ball_tunnel = 0;
+	resume = 0;  
+	if(ball_tunnel == 1) {
+		player1_velY++;
+		player1_y += player1_velY;
+		if(player1_y > (player1_level + level_width))
+			{player1_y = player1_level + level_width;	resume = 1; player1_level = player1_y; player1_hole++;}
+	} 
+	else if(ball_tunnel == 2) {
+		player2_velY++;
+		player2_y += player2_velY;
+		if(player2_y > (player2_level + level_width))
+			{player2_y = player2_level + level_width;	resume = 1; player2_level = player2_y; player2_hole++;} 
+	} 
+	else if(ball_tunnel == 3) {
+		player1_velY++;
+		player1_y += player1_velY;
+		if(player1_y > (player1_level + level_width))
+			{player1_y = player1_level + level_width;	resume = 1; player1_level = player1_y; player1_hole++;} 
+	
+		player2_velY++;
+		player2_y += player2_velY;
+		if(player2_y > (player2_level + level_width))
+			{player2_y = player2_level + level_width; resume = 1; player2_level = player2_y; player2_hole++;} 
+	} 
+
+	ctx.fillStyle="rgba(0,0,0,0.1)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+	
+	ctx.beginPath();
+    ctx.arc(player1_x, player1_y, player1_r, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+	ctx.strokeStyle = "blue";
+	ctx.fillStyle = "white";
+	ctx.fill();
+	ctx.stroke();
+	ctx.closePath();
+	
+	ctx.beginPath();
+    ctx.arc(player2_x, player2_y, player2_r, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+	ctx.strokeStyle = "blue";
+	ctx.fillStyle = "white";
+	ctx.fill();
+	ctx.stroke();
+	ctx.closePath();
+	
+	if(resume == 1) {
+		resume = 0;
+		player1_velY = 0;
+		player2_velY = 0;
+		ball_tunnel = 0;
+		document.getElementById('score').innerHTML = score;
+		clearTimeout(z2);
+		update_players();
+	}
+	else
+		z2=setTimeout(tunnel_drop,10);	
+}
+
+document.addEventListener("keydown", function (e) {
+    keys1[e.keyCode] = true;
+    keys2[e.keyCode] = true;
+});
+
+document.addEventListener("keyup", function (e) {
+    if(keys1[e.keyCode] && !player1_invertkeys)
+		keys1[e.keyCode] = false;
+	else if(!keys1[e.keyCode] && player1_invertkeys) {
+		keys1[37] = false;
+		keys1[39] = false;
+		player1_invertkeys = false;
+	}	
+	if(keys2[e.keyCode] && !player2_invertkeys)
+		keys2[e.keyCode] = false;
+	else if(!keys2[e.keyCode] && player2_invertkeys) {
+		keys2[37] = false;
+		keys2[39] = false;
+		player2_invertkeys = false;	
+	}
+	
+});
+
+update_players();
+
+</script>
+
+</body>
+</html>
